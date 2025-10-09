@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Lector USB continuo → Ruta</title>
+<title>Lector continuo (USB/Bluetooth HID) → Ruta</title>
 <link rel="preconnect" href="https://unpkg.com"/>
 <style>
   :root{--bg:#0b0f14;--card:#121822;--ink:#e6edf3;--muted:#9fb0c8;--ok:#1db954;--err:#ff5c5c;--accent:#2d9cdb}
@@ -17,6 +17,7 @@
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   input[type=file],button,input[type=text],label.pill{border-radius:12px;border:1px solid #2a3750;background:#0c121b;color:var(--ink);padding:10px 12px}
   input[type=text]{min-width:300px;font-size:18px}
+  button{cursor:pointer}
   .status{margin-top:10px;border-radius:12px;padding:12px;font-weight:700}
   .ok{background:rgba(29,185,84,.14);border:1px solid rgba(29,185,84,.35)}
   .err{background:rgba(255,92,92,.14);border:1px solid rgba(255,92,92,.35)}
@@ -29,7 +30,6 @@
   .toast.ok{background:rgba(29,185,84,.98);color:#fff}
   .toast.err{background:rgba(255,92,92,.98);color:#fff}
   .hint{font-size:13px;color:var(--muted)}
-
   /* KPIs resumen CSV */
   .kpi-row{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;margin-top:10px}
   .kpi{flex:1 1 180px;background:#0c121b;border:1px solid #2a3750;border-radius:12px;padding:10px 12px}
@@ -40,8 +40,11 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Lector USB/Bluetooth continuo → Ruta</h1>
-  <div class="muted">Conecta el lector como <b>HID (modo teclado)</b>. CSV: <b>A = referencia de manifiesto</b>, <b>B = ID de la ruta</b>. Cada escaneo responde automáticamente la ruta. Solo los éxitos se guardan.</div>
+  <h1>Lector continuo (USB/Bluetooth HID) → Ruta</h1>
+  <div class="muted">
+    Conecta el lector como <b>HID (modo teclado)</b>. CSV: <b>Columna A = referencia de manifiesto</b>, <b>Columna B = ID de la ruta</b>.
+    Cada escaneo responde automáticamente la ruta. Solo los éxitos se guardan.
+  </div>
 
   <div class="grid">
     <!-- Izquierda: carga CSV + escaneo continuo -->
@@ -53,6 +56,10 @@
           <input id="csv" type="file" accept=".csv,text/csv" />
           <div class="hint">Separador coma. Con o sin encabezado.</div>
         </div>
+        <label class="pill"><input type="checkbox" id="beep" checked/> Beep</label>
+        <label class="pill"><input type="checkbox" id="vibrate" checked/> Vibrar</label>
+        <button id="clear-history">Limpiar historial</button>
+        <span id="successCount" class="badge">0 éxitos</span>
       </div>
 
       <!-- Resumen del CSV -->
@@ -74,13 +81,12 @@
       <!-- Escaneo continuo (HID) -->
       <div class="row" style="margin-top:10px">
         <input id="manual" type="text" placeholder="Apunte el lector aquí y escanee..." autocomplete="off" />
-        <span id="successCount" class="badge">0 éxitos</span>
       </div>
 
-      <div id="status" class="status warn">Cargue el CSV. Luego comience a escanear (ENTER como sufijo recomendado).</div>
+      <div id="status" class="status warn">Cargue el CSV. Luego comience a escanear. (Sufijo recomendado en el lector: <b>ENTER</b>).</div>
 
       <div class="hint" style="margin-top:6px">
-        Si su lector no envía ENTER, el sistema auto-procesa al detectar una pausa corta. Recomendado: habilitar sufijo <b>ENTER</b> en el lector.
+        Si su lector no envía ENTER, el sistema auto-procesa al detectar una pausa corta entre teclas.
       </div>
     </section>
 
@@ -105,11 +111,11 @@
   let okHistory = [];
   let successCount = 0;
 
-  // Auto-submit sin ENTER
-  const inactivityMs = 160; // pausa típica entre lecturas del lector
+  // Auto-submit si no viene ENTER
+  const inactivityMs = 160; // pausa breve típica entre caracteres del lector
   let inactivityTimer = null;
 
-  // Dedupe para evitar doble envío accidental del mismo código
+  // Dedupe para evitar doble envío del mismo código
   const dedupeMs = 500;
   let lastCode = ''; let lastWhen = 0;
 
@@ -128,6 +134,7 @@
     setTimeout(()=> toastEl.style.display='none', 1100);
   }
   function beep(){
+    if(!$('beep').checked) return;
     try{
       const ctx = new (window.AudioContext||window.webkitAudioContext)();
       const o = ctx.createOscillator(), g = ctx.createGain();
@@ -138,7 +145,7 @@
       setTimeout(()=>{ g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.05); o.stop(); ctx.close(); }, 110);
     }catch(e){}
   }
-  function vibrate(){ if(navigator.vibrate) navigator.vibrate(50); }
+  function vibrate(){ if($('vibrate').checked && navigator.vibrate) navigator.vibrate(50); }
   function normalize(x){ return String(x||'').trim(); }
 
   // ===== CSV (A = manifiesto, B = ruta) =====
@@ -165,12 +172,12 @@
           }
         }
 
-        // KPIs
-        const uniqueManifests = new Set(manifestList).size;
-        const uniqueRoutes    = new Set(routeList.filter(x=>x!=='')).size;
+        // KPIs (según tu definición)
+        const uniqueManifests = new Set(manifestList).size;                  // Quantidad de paquetes
+        const uniqueRoutes    = new Set(routeList.filter(x=>x!=='')).size;   // Quantidad de rutas
         const freq = Object.create(null);
         for(const m of manifestList){ freq[m] = (freq[m]||0) + 1; }
-        let dupManifests = 0; for(const m in freq){ if(freq[m] > 1) dupManifests += (freq[m]-1); }
+        let dupManifests = 0; for(const m in freq){ if(freq[m] > 1) dupManifests += (freq[m]-1); } // Quantidad de paquetes duplicados
 
         // Mostrar KPIs
         $('kpi-unique-manifests').textContent = uniqueManifests;
@@ -180,7 +187,7 @@
 
         setStatus(`CSV cargado (${uniqueManifests} paquetes únicos, ${uniqueRoutes} rutas). Comience a escanear.`, 'ok');
 
-        // Preparar escaneo continuo
+        // Asegurar foco continuo para el lector
         focusLoop();
       },
       error: ()=> setStatus('Error al leer el CSV.', 'err')
@@ -205,20 +212,21 @@
     $('manual').focus();
   }
 
-  // Enter/Tab del lector dispara inmediato
+  // ENTER/Tab del lector dispara inmediato
   $('manual').addEventListener('keydown', (ev)=>{
     if(ev.key === 'Enter' || ev.key === 'Tab'){
       ev.preventDefault();
       processScanValue();
     }
   });
+
   // Si el lector no manda ENTER: auto-procesar tras pausa breve
   $('manual').addEventListener('input', ()=>{
     if(inactivityTimer) clearTimeout(inactivityTimer);
     inactivityTimer = setTimeout(processScanValue, inactivityMs);
   });
 
-  // Mantener el foco siempre (para flujo continuo)
+  // Mantener el foco siempre (flujo continuo de escaneos)
   function focusLoop(){
     $('manual').focus();
     setInterval(()=>{
@@ -243,16 +251,24 @@
     const code = String(codeRaw).trim();
     const route = map.get(code);
     if(route !== undefined){
-      setStatus(`Ruta: ${route}`, 'ok');
-      toast(`✔ ${code} → ${route}`, 'ok');
+      setStatus(`Ruta: ${route || '(sin ruta)'}`, 'ok');
+      toast(`✔ ${code} → ${route || '(sin ruta)'}`, 'ok');
       beep(); vibrate();
-      addSuccess(code, route);
+      addSuccess(code, route || '(sin ruta)');
     }else{
       setStatus('Código no encontrado en el CSV.', 'err');
       toast(`✖ ${code} no encontrado`, 'err');
       beep(); // no se registra el error
     }
   }
+
+  // Limpiar historial
+  $('clear-history').addEventListener('click', ()=>{
+    $('history').querySelector('tbody').innerHTML = '';
+    okHistory = []; successCount = 0;
+    $('successCount').textContent = '0 éxitos';
+    setStatus('Historial limpiado.', 'warn');
+  });
 </script>
 </body>
 </html>
