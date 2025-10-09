@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Cámara en vivo / Lector USB • Captura o Continuo → Ruta</title>
+<title>Lector USB continuo → Ruta</title>
 <link rel="preconnect" href="https://unpkg.com"/>
 <style>
   :root{--bg:#0b0f14;--card:#121822;--ink:#e6edf3;--muted:#9fb0c8;--ok:#1db954;--err:#ff5c5c;--accent:#2d9cdb}
@@ -16,36 +16,18 @@
   .card{background:var(--card);border:1px solid #1d2838;border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   input[type=file],button,input[type=text],label.pill{border-radius:12px;border:1px solid #2a3750;background:#0c121b;color:var(--ink);padding:10px 12px}
-  input[type=text]{min-width:260px}
-  button.primary{background:var(--accent);border:none;color:#fff;font-weight:700;cursor:pointer}
-  button:disabled{opacity:.55;cursor:not-allowed}
+  input[type=text]{min-width:300px;font-size:18px}
   .status{margin-top:10px;border-radius:12px;padding:12px;font-weight:700}
   .ok{background:rgba(29,185,84,.14);border:1px solid rgba(29,185,84,.35)}
   .err{background:rgba(255,92,92,.14);border:1px solid rgba(255,92,92,.35)}
   .warn{background:rgba(45,156,219,.14);border:1px solid rgba(45,156,219,.35)}
   .muted{color:var(--muted)}
   .table{width:100%;border-collapse:collapse;margin-top:8px}
+  .table th,.table td{border-bottom:1px solid #243043;padding:6px;text-align:left}
   .badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#0c121b;border:1px solid #2a3650;color:#9fb0c8;font-size:12px}
   .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:22px;min-width:260px;max-width:90vw;padding:12px 14px;border-radius:12px;font-weight:700;box-shadow:0 8px 30px rgba(0,0,0,.35);z-index:9999}
   .toast.ok{background:rgba(29,185,84,.98);color:#fff}
   .toast.err{background:rgba(255,92,92,.98);color:#fff}
-
-  video{width:100%;border-radius:12px;background:#000}
-  .stage{position:relative;padding:0}
-  .stage.landscape-hint::after{
-    content:'Gira el teléfono/tablet a horizontal para leer 1D mejor';
-    position:absolute;left:50%;top:10px;transform:translateX(-50%);
-    font-size:12px;background:rgba(0,0,0,.55);padding:6px 10px;border-radius:999px;color:#fff
-  }
-  /* Botón de captura pegado al video */
-  .capture-fab{
-    position:absolute;left:50%;bottom:10px;transform:translateX(-50%);
-    background:var(--accent);color:#fff;border:none;border-radius:999px;
-    padding:12px 18px;font-weight:800;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.35);
-    display:flex;align-items:center;gap:8px;z-index:2;
-  }
-  .capture-fab:disabled{opacity:.55;cursor:not-allowed}
-  .capture-fab::before{content:'📸'}
   .hint{font-size:13px;color:var(--muted)}
 
   /* KPIs resumen CSV */
@@ -54,18 +36,15 @@
   .kpi .title{font-size:12px;color:#9fb0c8;margin-bottom:4px}
   .kpi .value{font-weight:800;font-size:20px;line-height:1}
 </style>
-<!-- CSV -->
 <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
-<!-- Quagga2 (fallback para decodificar un solo frame del canvas) -->
-<script src="https://unpkg.com/@ericblade/quagga2@2.0.0/dist/quagga.min.js"></script>
 </head>
 <body>
 <div class="wrap">
-  <h1>Cámara en vivo / Lector USB • Captura o Continuo → Ruta</h1>
-  <div class="muted">CSV (2 columnas): <b>A = referencia de manifiesto (ID del paquete)</b>, <b>B = ID de la ruta</b>. Puedes usar <b>cámara</b> o un <b>lector USB/Bluetooth (modo teclado)</b>. Solo los éxitos se guardan en el historial.</div>
+  <h1>Lector USB/Bluetooth continuo → Ruta</h1>
+  <div class="muted">Conecta el lector como <b>HID (modo teclado)</b>. CSV: <b>A = referencia de manifiesto</b>, <b>B = ID de la ruta</b>. Cada escaneo responde automáticamente la ruta. Solo los éxitos se guardan.</div>
 
   <div class="grid">
-    <!-- IZQUIERDA: cámara + acciones + lector -->
+    <!-- Izquierda: carga CSV + escaneo continuo -->
     <section class="card">
       <!-- Carga CSV -->
       <div class="row">
@@ -92,40 +71,20 @@
         </div>
       </div>
 
-      <!-- Controles principales -->
-      <div class="row" style="margin-top:8px">
-        <button id="btn-start" class="primary">Iniciar cámara</button>
-        <button id="btn-stop">Detener</button>
-        <label class="pill"><input type="checkbox" id="toggle-cont" /> Modo continuo (autoescaneo cámara)</label>
-        <label class="pill"><input type="checkbox" id="scanner-mode" /> Modo lector (USB/Bluetooth)</label>
-        <label class="pill"><input type="checkbox" id="auto-submit" /> Auto-procesar sin ENTER</label>
-        <label class="pill"><input type="checkbox" id="beep" checked/> Beep</label>
-        <label class="pill"><input type="checkbox" id="vibrate" checked/> Vibrar</label>
+      <!-- Escaneo continuo (HID) -->
+      <div class="row" style="margin-top:10px">
+        <input id="manual" type="text" placeholder="Apunte el lector aquí y escanee..." autocomplete="off" />
         <span id="successCount" class="badge">0 éxitos</span>
       </div>
 
-      <!-- Video / Captura -->
-      <div class="card stage" id="stage" style="margin-top:12px">
-        <video id="video" playsinline muted></video>
-        <canvas id="canvas" style="display:none"></canvas>
-        <button id="btn-capture" class="capture-fab" disabled>Capturar y escanear</button>
-      </div>
-
-      <div id="status" class="status warn">Cargue el CSV y luego inicie la cámara o active el Modo lector.</div>
-
-      <!-- Entrada manual / lector -->
-      <div class="row" style="margin-top:10px">
-        <input id="manual" type="text" placeholder="Escanee aquí (o pegue un ID de paquete)" />
-        <button id="btn-lookup">Buscar</button>
-      </div>
+      <div id="status" class="status warn">Cargue el CSV. Luego comience a escanear (ENTER como sufijo recomendado).</div>
 
       <div class="hint" style="margin-top:6px">
-        Para lector USB/Bluetooth: configure <b>HID teclado</b> y sufijo <b>ENTER</b>.  
-        iPad USB-C puede requerir <b>hub alimentado</b>; Bluetooth HID evita cables.
+        Si su lector no envía ENTER, el sistema auto-procesa al detectar una pausa corta. Recomendado: habilitar sufijo <b>ENTER</b> en el lector.
       </div>
     </section>
 
-    <!-- DERECHA: historial (solo éxitos) -->
+    <!-- Derecha: historial (solo éxitos) -->
     <aside class="card">
       <strong>Lecturas exitosas</strong>
       <div class="hint">Últimos 20 (los errores no se registran)</div>
@@ -140,40 +99,24 @@
 <div id="toast" class="toast" style="display:none"></div>
 
 <script>
-  // ======= Estado =======
+  // ===== Estado =====
   // map: referencia de manifiesto (Col A) -> ID de ruta (Col B)
   let map = new Map();
   let okHistory = [];
   let successCount = 0;
 
-  // Cámara
-  let stream = null;
-  let videoReady = false;
-
-  // Escaneo continuo con cámara
-  let continuousOn = false;
-  let scanningBusy = false;
-  let contTimer = null;
-  const contIntervalMs = 400;
-  const dedupeMs = 1200;
-  const lastSuccessAt = new Map();
-
-  // Modo lector (USB/Bluetooth)
-  let scannerMode = false;
-  let keepFocusTimer = null;
-  let autoSubmit = false;
+  // Auto-submit sin ENTER
+  const inactivityMs = 160; // pausa típica entre lecturas del lector
   let inactivityTimer = null;
-  const inactivityMs = 200; // tiempo sin tecleo para auto-procesar
+
+  // Dedupe para evitar doble envío accidental del mismo código
+  const dedupeMs = 500;
+  let lastCode = ''; let lastWhen = 0;
 
   const $ = (id)=>document.getElementById(id);
-  const video = $('video');
-  const canvas = $('canvas');
   const statusEl = $('status');
   const toastEl = $('toast');
-  const captureBtn = $('btn-capture');
-  const stageEl = $('stage');
 
-  // ======= Helpers UI =======
   function setStatus(msg, kind='warn'){
     statusEl.className = 'status ' + kind;
     statusEl.textContent = msg;
@@ -182,10 +125,9 @@
     toastEl.textContent = msg;
     toastEl.className = 'toast ' + kind;
     toastEl.style.display = 'block';
-    setTimeout(()=> toastEl.style.display='none', 1200);
+    setTimeout(()=> toastEl.style.display='none', 1100);
   }
   function beep(){
-    if(!$('beep').checked) return;
     try{
       const ctx = new (window.AudioContext||window.webkitAudioContext)();
       const o = ctx.createOscillator(), g = ctx.createGain();
@@ -196,10 +138,10 @@
       setTimeout(()=>{ g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.05); o.stop(); ctx.close(); }, 110);
     }catch(e){}
   }
-  function vibrate(){ if($('vibrate').checked && navigator.vibrate) navigator.vibrate(50); }
+  function vibrate(){ if(navigator.vibrate) navigator.vibrate(50); }
   function normalize(x){ return String(x||'').trim(); }
 
-  // ======= CSV (A = manifiesto, B = ruta) =======
+  // ===== CSV (A = manifiesto, B = ruta) =====
   $('csv').addEventListener('change', (e)=>{
     const f = e.target.files?.[0]; if(!f) return;
     Papa.parse(f, {
@@ -236,190 +178,67 @@
         $('kpi-dup-manifests').textContent    = dupManifests;
         $('csv-summary').style.display = 'flex';
 
-        setStatus(`CSV cargado (${uniqueManifests} paquetes únicos, ${uniqueRoutes} rutas). Inicie la cámara o active Modo lector.`, 'ok');
+        setStatus(`CSV cargado (${uniqueManifests} paquetes únicos, ${uniqueRoutes} rutas). Comience a escanear.`, 'ok');
+
+        // Preparar escaneo continuo
+        focusLoop();
       },
       error: ()=> setStatus('Error al leer el CSV.', 'err')
     });
   });
 
-  // ======= Inicio/paro de cámara (seguro) =======
-  function waitForVideoReady(video, timeout=8000){
-    return new Promise((resolve, reject)=>{
-      if(video.readyState >= 2 && video.videoWidth && video.videoHeight) return resolve();
-      let done=false;
-      const to = setTimeout(()=>{ if(done) return; done=true; reject(new Error('Video no listo (timeout)')); }, timeout);
-      function onReady(){
-        if(done) return;
-        if(video.videoWidth && video.videoHeight){ done=true; clearTimeout(to); cleanup(); resolve(); }
-      }
-      function cleanup(){ video.removeEventListener('loadedmetadata', onReady); video.removeEventListener('canplay', onReady); }
-      video.addEventListener('loadedmetadata', onReady);
-      video.addEventListener('canplay', onReady);
-    });
-  }
+  // ===== Escaneo continuo (HID) =====
+  function processScanValue(){
+    const code = normalize($('manual').value);
+    if(!code) return;
 
-  async function pickBackCameraDeviceId(){
-    try{
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const cams = devices.filter(d=>d.kind === 'videoinput');
-      const back = cams.find(c => /back|rear|environment/i.test(c.label||'')) || cams[0];
-      return back && back.deviceId ? back.deviceId : null;
-    }catch(e){ return null; }
-  }
-
-  async function startCamera(){
-    captureBtn.disabled = true; videoReady = false;
-
-    try{
-      try{ if(screen.orientation && screen.orientation.lock){ await screen.orientation.lock('landscape'); } }catch(e){}
-
-      let tmpStream = await navigator.mediaDevices.getUserMedia({
-        video:{ facingMode:{ ideal:'environment' }, width:{ ideal:1920 }, height:{ ideal:1080 }, aspectRatio:{ ideal:16/9 } },
-        audio:false
-      });
-      video.srcObject = tmpStream;
-      await video.play();
-
-      const backId = await pickBackCameraDeviceId();
-      if(backId){
-        const currentTrack = tmpStream.getVideoTracks()[0];
-        const settings = currentTrack.getSettings?.() || {};
-        const currentId = settings.deviceId || null;
-        if(!currentId || currentId !== backId){
-          currentTrack.stop();
-          tmpStream.getTracks().forEach(t=>t.stop());
-          tmpStream = await navigator.mediaDevices.getUserMedia({
-            video:{ deviceId:{ exact: backId }, width:{ ideal:1920 }, height:{ ideal:1080 }, aspectRatio:{ ideal:16/9 } },
-            audio:false
-          });
-          video.srcObject = tmpStream;
-          await video.play();
-        }
-      }
-
-      stream = tmpStream;
-      await waitForVideoReady(video);
-      videoReady = true;
-      captureBtn.disabled = false;
-
-      if(window.innerHeight > window.innerWidth) stageEl.classList.add('landscape-hint');
-      else stageEl.classList.remove('landscape-hint');
-      window.addEventListener('orientationchange', ()=>{
-        if(window.innerHeight > window.innerWidth) stageEl.classList.add('landscape-hint');
-        else stageEl.classList.remove('landscape-hint');
-      });
-
-      setStatus('Cámara lista. Toca el botón sobre el video o activa el Modo continuo.', 'warn');
-    }catch(err){
-      console.error(err);
-      setStatus(`Error de cámara: ${err.name||'Desconocido'} — ${err.message||''}. Revisa permisos.`, 'err');
+    // Dedupe rápido
+    const now = Date.now();
+    if(code === lastCode && (now - lastWhen) < dedupeMs){
+      $('manual').value = '';
+      return;
     }
+    lastCode = code; lastWhen = now;
+
+    handleDetected(code);
+    $('manual').value = ''; // listo para el siguiente
+    $('manual').focus();
   }
 
-  async function stopCamera(){
-    await stopContinuous();
-    captureBtn.disabled = true; videoReady = false;
-    try{
-      if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
-      if(video){ video.pause(); video.srcObject=null; }
-      setStatus('Cámara detenida.', 'warn');
-    }catch(e){}
-  }
-  $('btn-start').addEventListener('click', startCamera);
-  $('btn-stop').addEventListener('click', stopCamera);
-
-  // ======= Capturar frame actual al canvas (cámara) =======
-  function grabFrameToCanvas(){
-    if(!stream || !videoReady) throw new Error('La cámara no está lista');
-    const w = video.videoWidth, h = video.videoHeight;
-    canvas.width = w; canvas.height = h;
-    canvas.getContext('2d').drawImage(video, 0, 0, w, h);
-    return canvas;
-  }
-
-  // ======= Decodificar (BarcodeDetector → Quagga2) =======
-  async function decodeFromCanvas(cnv){
-    if('BarcodeDetector' in window){
-      try{
-        const supported = await window.BarcodeDetector.getSupportedFormats?.() || [];
-        const wanted = ['code_128','code_39','ean_13','ean_8','upc_a','upc_e','itf','codabar','qr_code'];
-        const fmts = wanted.filter(f=>supported.includes(f));
-        if(fmts.length){
-          const det = new BarcodeDetector({ formats: fmts });
-          const res = await det.detect(cnv);
-          if(res && res.length){ return res[0].rawValue || ''; }
-        }
-      }catch(e){ /* fallback */ }
+  // Enter/Tab del lector dispara inmediato
+  $('manual').addEventListener('keydown', (ev)=>{
+    if(ev.key === 'Enter' || ev.key === 'Tab'){
+      ev.preventDefault();
+      processScanValue();
     }
-    const code = await new Promise((resolve)=>{
-      Quagga.decodeSingle({
-        src: cnv.toDataURL('image/png'),
-        numOfWorkers: 0,
-        locate: true,
-        decoder: { readers: [
-          'code_128_reader','code_39_reader','ean_reader',
-          'ean_8_reader','upc_reader','upc_e_reader','itf_reader','codabar_reader'
-        ]}
-      }, (result)=> resolve(result?.codeResult?.code || ''));
-    });
-    return code || '';
+  });
+  // Si el lector no manda ENTER: auto-procesar tras pausa breve
+  $('manual').addEventListener('input', ()=>{
+    if(inactivityTimer) clearTimeout(inactivityTimer);
+    inactivityTimer = setTimeout(processScanValue, inactivityMs);
+  });
+
+  // Mantener el foco siempre (para flujo continuo)
+  function focusLoop(){
+    $('manual').focus();
+    setInterval(()=>{
+      if(document.activeElement !== $('manual')) $('manual').focus();
+    }, 300);
   }
 
-  // ======= Flujo de captura única (cámara) =======
-  async function captureAndScan(){
-    try{
-      if(map.size===0){ setStatus('Cargue el CSV primero.', 'err'); return; }
-      const cnv = grabFrameToCanvas();
-      setStatus('Leyendo…', 'warn');
-      const code = await decodeFromCanvas(cnv);
-      if(!code){ setStatus('No se encontró código. Acérquese y mantenga horizontal.', 'err'); toast('No se encontró código', 'err'); return; }
-      handleDetected(code);
-    }catch(e){
-      setStatus(`Falla en la captura: ${e.message}`, 'err');
-    }
-  }
-  captureBtn.addEventListener('click', captureAndScan);
-
-  // ======= Modo continuo (cámara) =======
-  async function tickContinuous(){
-    if(!continuousOn || scanningBusy || map.size===0 || !videoReady) return;
-    scanningBusy = true;
-    try{
-      const cnv = grabFrameToCanvas();
-      const code = await decodeFromCanvas(cnv);
-      if(code){
-        const now = Date.now();
-        const last = lastSuccessAt.get(code) || 0;
-        if((now - last) >= dedupeMs){ handleDetected(code); lastSuccessAt.set(code, now); }
-      }
-    }catch(e){ /* silencioso */ }
-    finally{ scanningBusy = false; }
-  }
-  async function startContinuous(){
-    if(continuousOn) return;
-    if(!videoReady){ setStatus('Inicie la cámara primero.', 'err'); $('toggle-cont').checked = false; return; }
-    continuousOn = true;
-    setStatus('Modo continuo: ACTIVADO', 'warn');
-    contTimer = setInterval(tickContinuous, contIntervalMs);
-  }
-  async function stopContinuous(){
-    continuousOn = false;
-    if(contTimer){ clearInterval(contTimer); contTimer=null; }
-    setStatus('Modo continuo: DESACTIVADO', 'warn');
-  }
-  $('toggle-cont').addEventListener('change', (e)=> e.target.checked ? startContinuous() : stopContinuous());
-
-  // ======= Resultado (historial solo éxitos) =======
+  // ===== Resultado (historial solo éxitos) =====
   function addSuccess(code, route){
-    okHistory.push({ t:Date.now(), code, route });
-    successCount++;
-    $('successCount').textContent = `${successCount} éxitos`;
     const tb = $('history').querySelector('tbody');
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${new Date().toLocaleTimeString()}</td><td>${code}</td><td>${route}</td>`;
     tb.insertBefore(tr, tb.firstChild);
     while(tb.rows.length>20) tb.deleteRow(tb.rows.length-1);
+
+    okHistory.push({ t:Date.now(), code, route });
+    successCount++;
+    $('successCount').textContent = `${successCount} éxitos`;
   }
+
   function handleDetected(codeRaw){
     const code = String(codeRaw).trim();
     const route = map.get(code);
@@ -428,60 +247,12 @@
       toast(`✔ ${code} → ${route}`, 'ok');
       beep(); vibrate();
       addSuccess(code, route);
-      if(scannerMode){ $('manual').value=''; $('manual').focus(); } // listo para el siguiente
     }else{
       setStatus('Código no encontrado en el CSV.', 'err');
       toast(`✖ ${code} no encontrado`, 'err');
-      beep();
-      if(scannerMode){ $('manual').value=''; $('manual').focus(); }
+      beep(); // no se registra el error
     }
   }
-
-  // ======= Modo lector (USB/Bluetooth) =======
-  function enableScannerMode(on){
-    scannerMode = on;
-    if(on){
-      // parar cámara para evitar confusión
-      stopCamera();
-      $('toggle-cont').checked = false;
-      stopContinuous();
-      $('manual').value='';
-      $('manual').focus();
-      if(keepFocusTimer) clearInterval(keepFocusTimer);
-      keepFocusTimer = setInterval(()=>{
-        if(document.activeElement !== $('manual')) $('manual').focus();
-      }, 300);
-      setStatus('Modo lector: listo. Configure el escáner con sufijo ENTER (recomendado).', 'ok');
-    }else{
-      if(keepFocusTimer){ clearInterval(keepFocusTimer); keepFocusTimer=null; }
-      setStatus('Modo lector: apagado. Puedes usar la cámara.', 'warn');
-    }
-  }
-  $('scanner-mode').addEventListener('change', e => enableScannerMode(e.target.checked));
-  $('auto-submit').addEventListener('change', e => { autoSubmit = e.target.checked; });
-
-  // Procesar manual / lector
-  function processManual(){
-    const v = normalize($('manual').value);
-    if(!v) return;
-    handleDetected(v);
-  }
-  $('btn-lookup').addEventListener('click', processManual);
-
-  // ENTER o TAB disparan búsqueda (ideal para lectores que agregan CR/LF o TAB)
-  $('manual').addEventListener('keydown', (ev)=>{
-    if(ev.key === 'Enter' || ev.key === 'Tab'){
-      ev.preventDefault();
-      processManual();
-    }
-  });
-
-  // Auto-procesar si el lector no envía ENTER (inactividad breve)
-  $('manual').addEventListener('input', ()=>{
-    if(!(scannerMode && autoSubmit)) return;
-    if(inactivityTimer) clearTimeout(inactivityTimer);
-    inactivityTimer = setTimeout(processManual, inactivityMs);
-  });
 </script>
 </body>
 </html>
