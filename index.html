@@ -1,197 +1,334 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>HID Keyboard Test — Únicos</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Lector continuo (HID) → Ruta</title>
+<link rel="preconnect" href="https://unpkg.com"/>
 <style>
-  :root{--ink:#0e1726;--muted:#5b6b7c;--card:#f4f7fb;--line:#d7e0ea;--accent:#2d9cdb;--ok:#1db954}
+  :root{--bg:#0b0f14;--card:#121822;--ink:#e6edf3;--muted:#9fb0c8;--ok:#1db954;--err:#ff5c5c;--accent:#2d9cdb}
   *{box-sizing:border-box}
-  body{margin:0;font:16px system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#fff;color:var(--ink)}
-  .wrap{max-width:980px;margin:0 auto;padding:20px}
-  h1{margin:0 0 8px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:12px}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial,sans-serif;background:linear-gradient(180deg,#0b0f14,#0f1622);color:var(--ink)}
+  .wrap{max-width:1100px;margin:0 auto;padding:20px}
+  h1{font-size:20px;margin:0 0 10px}
+  .grid{display:grid;gap:16px}
+  @media(min-width:900px){.grid{grid-template-columns:1.2fr .8fr}}
+  .card{background:var(--card);border:1px solid #1d2838;border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-  label{display:inline-flex;align-items:center;gap:6px}
-  input[type="number"]{width:90px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:#fff}
-  button{padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer}
-  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  input[type=file],button,input[type=text],label.pill{border-radius:12px;border:1px solid #2a3750;background:#0c121b;color:var(--ink);padding:10px 12px}
+  input[type=text]{min-width:320px;font-size:18px}
+  button{cursor:pointer}
+  .status{margin-top:10px;border-radius:12px;padding:12px;font-weight:700}
+  .ok{background:rgba(29,185,84,.14);border:1px solid rgba(29,185,84,.35)}
+  .err{background:rgba(255,92,92,.14);border:1px solid rgba(255,92,92,.35)}
+  .warn{background:rgba(45,156,219,.14);border:1px solid rgba(45,156,219,.35)}
   .muted{color:var(--muted)}
-  .box{font-family:ui-monospace,Consolas,monospace;background:#fff;border:1px dashed var(--line);border-radius:8px;padding:8px}
-  .badge{display:inline-block;padding:3px 10px;border-radius:999px;border:1px solid var(--line);background:#fff}
-  .badge.ok{border-color:#bfe6c8;background:#eaf9ee;color:#0d6}
-  table{width:100%;border-collapse:collapse}
-  th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left}
-  th{background:#f9fbfe}
+  .table{width:100%;border-collapse:collapse;margin-top:8px}
+  .table th,.table td{border-bottom:1px solid #243043;padding:6px;text-align:left}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#0c121b;border:1px solid #2a3650;color:#9fb0c8;font-size:12px}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:22px;min-width:260px;max-width:90vw;padding:12px 14px;border-radius:12px;font-weight:700;box-shadow:0 8px 30px rgba(0,0,0,.35);z-index:9999}
+  .toast.ok{background:rgba(29,185,84,.98);color:#fff}
+  .toast.err{background:rgba(255,92,92,.98);color:#fff}
+  .hint{font-size:13px;color:var(--muted)}
+  /* KPIs resumen CSV */
+  .kpi-row{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;margin-top:10px}
+  .kpi{flex:1 1 180px;background:#0c121b;border:1px solid #2a3750;border-radius:12px;padding:10px 12px}
+  .kpi .title{font-size:12px;color:#9fb0c8;margin-bottom:4px}
+  .kpi .value{font-weight:800;font-size:20px;line-height:1}
+  /* Monitor de buffer (opcional) */
+  .buffer{font-family:ui-monospace,Consolas,monospace;font-size:14px;color:#c3d2e7;background:#0c121b;border:1px dashed #2a3750;border-radius:8px;padding:6px 8px}
 </style>
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
 </head>
 <body>
 <div class="wrap">
-  <h1>HID Keyboard Test — Únicos</h1>
-  <p class="muted">Escanee con su lector USB/Bluetooth (modo teclado). La tabla solo registra <b>códigos válidos únicos</b>. Presione <b>ENTER</b> para finalizar un código, o active autoflush.</p>
-
-  <div class="card">
-    <div class="row">
-      <label><input id="beep" type="checkbox" checked> Beep</label>
-      <label><input id="autoFlush" type="checkbox"> Auto-procesar en pausa</label>
-      <label>Pausa (ms) <input id="flushMs" type="number" value="120" min="40" step="10"></label>
-      <label><input id="showKeys" type="checkbox"> Ver eventos de tecla</label>
-      <button id="clearAll">Limpiar todo</button>
-      <span id="uniqueCount" class="badge ok">0 únicos</span>
-    </div>
-    <div style="margin-top:8px" class="box">
-      <b>Buffer:</b> <span id="buf"></span>
-    </div>
-    <div style="margin-top:8px" class="box">
-      <b>Último scan:</b> <span id="last">—</span>
-    </div>
+  <h1>Lector continuo (USB/Bluetooth HID) → Ruta</h1>
+  <div class="muted">
+    Conecta el lector como <b>HID (modo teclado)</b>. CSV: <b>Columna A = referencia de manifiesto</b>, <b>Columna B = ID de la ruta</b>.<br>
+    Cada escaneo responde automáticamente la ruta. La tabla abajo muestra <b>solo lecturas únicas válidas</b> y un <b>contador</b> para el carrero.
   </div>
 
-  <div class="card">
-    <strong>Lecturas únicas</strong>
-    <table>
-      <thead><tr><th>#</th><th>Código</th><th>Primera vez</th></tr></thead>
-      <tbody id="uniqueBody"></tbody>
-    </table>
-  </div>
+  <div class="grid">
+    <!-- Izquierda: carga CSV + escaneo continuo -->
+    <section class="card">
+      <div class="row">
+        <div>
+          <label>Planilla (CSV)</label><br/>
+          <input id="csv" type="file" accept=".csv,text/csv" />
+          <div class="hint">Separador coma. Con o sin encabezado.</div>
+        </div>
+        <label class="pill"><input type="checkbox" id="beep" checked/> Beep</label>
+        <label class="pill"><input type="checkbox" id="vibrate" checked/> Vibrar</label>
+        <button id="clear-history">Limpiar historial</button>
+        <span id="successCount" class="badge">0 únicos válidos</span>
+      </div>
 
-  <div class="card" id="keysWrap" style="display:none">
-    <strong>Eventos de tecla (debug)</strong>
-    <pre id="keys" class="box" style="min-height:120px;white-space:pre-wrap"></pre>
+      <!-- Resumen del CSV -->
+      <div id="csv-summary" class="kpi-row" style="display:none">
+        <div class="kpi">
+          <div class="title">Cantidad de paquetes</div>
+          <div class="value" id="kpi-unique-manifests">0</div>
+        </div>
+        <div class="kpi">
+          <div class="title">Cantidad de rutas</div>
+          <div class="value" id="kpi-unique-routes">0</div>
+        </div>
+        <div class="kpi">
+          <div class="title">Cantidad de paquetes duplicados</div>
+          <div class="value" id="kpi-dup-manifests">0</div>
+        </div>
+      </div>
+
+      <!-- Monitor de buffer -->
+      <div class="row" style="margin-top:10px">
+        <input id="manual" type="text" placeholder="(Opcional) Campo visible — el lector puede escribir aquí" autocomplete="off" />
+        <div class="buffer" id="bufferView" title="Últimos caracteres leídos por el lector"></div>
+      </div>
+
+      <div id="status" class="status warn">Cargue el CSV y empiece a escanear. Sufijo recomendado en el lector: <b>ENTER</b>.</div>
+
+      <div class="hint" style="margin-top:6px">
+        Si su lector no envía ENTER/TAB, el sistema procesa automáticamente tras una <b>pausa breve</b>.
+      </div>
+    </section>
+
+    <!-- Derecha: historial (solo éxitos únicos) -->
+    <aside class="card">
+      <strong>Lecturas únicas válidas</strong>
+      <div class="hint">Se ignoran duplicados</div>
+      <table class="table" id="history">
+        <thead><tr><th>Hora</th><th>Paquete</th><th>Ruta</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </aside>
   </div>
 </div>
 
+<div id="toast" class="toast" style="display:none"></div>
+
 <script>
-  // --- configuración / reglas de validez ---
-  const DEDUPE_MS = 800;        // evita doble hit inmediato si el haz sigue en el código
-  const MIN_LEN   = 4;          // longitud mínima aceptada
-  const VALID_RE  = /^[A-Z0-9\-\.\/\+\%\s]+$/i; // alfanumérico + símbolos comunes de Code39/128
+  // ===== Config y estado =====
+  const INACTIVITY_MS = 70;   // pausa breve tras tecleo para "fin de código"
+  const DEDUPE_MS = 800;      // rebote del mismo código en pocos ms
+  const MIN_LEN = 6;          // longitud mínima aceptada
+  const STRIP_AIM_ID = true;  // elimina prefijos tipo ]C1, ]A0 si tu lector los agrega
+  const VALID_RE = /^[A-Z0-9\-\.\/\+\%\:]+$/i; // caracteres comunes en 1D/2D; ajustable
 
-  // --- estado ---
-  let buffer = '';
-  let lastScan = '';
-  let lastWhen = 0;
-  let timer = null;
+  // map: referencia de manifiesto (Col A) -> ID de ruta (Col B)
+  let map = new Map();
 
-  const unique = new Map(); // code -> timestamp (primera vez)
+  // Conjunto de lecturas únicas válidas (para la tabla y el contador)
+  const uniqueScans = new Set();
 
-  // --- elementos ---
-  const $ = id => document.getElementById(id);
-  const bufEl = $('buf'), lastEl = $('last'), keysEl = $('keys'), keysWrap = $('keysWrap');
-  const uniqueBody = $('uniqueBody'), uniqueCount = $('uniqueCount');
+  // Buffer global (captura a nivel de página)
+  let scanBuffer = '';
+  let inactivityTimer = null;
+  let lastCode = ''; let lastWhen = 0;
 
-  // --- utilidades UI ---
-  function showBuffer(){ bufEl.textContent = buffer; }
-  function logKey(e){
-    if(!$('showKeys').checked) return;
-    keysWrap.style.display = '';
-    keysEl.textContent += `${e.type}: key="${e.key}" code=${e.code}\n`;
-    keysEl.scrollTop = keysEl.scrollHeight;
+  const $ = (id)=>document.getElementById(id);
+  const statusEl = $('status');
+  const toastEl = $('toast');
+  const bufferView = $('bufferView');
+
+  // ===== UI helpers =====
+  function setStatus(msg, kind='warn'){
+    statusEl.className = 'status ' + kind;
+    statusEl.textContent = msg;
   }
-  $('showKeys').addEventListener('change', ()=> keysWrap.style.display = $('showKeys').checked ? '' : 'none');
-
+  function toast(msg, kind='ok'){
+    toastEl.textContent = msg;
+    toastEl.className = 'toast ' + kind;
+    toastEl.style.display = 'block';
+    setTimeout(()=> toastEl.style.display='none', 1100);
+  }
   function beep(){
     if(!$('beep').checked) return;
     try{
       const ctx = new (window.AudioContext||window.webkitAudioContext)();
-      const osc = ctx.createOscillator(), g=ctx.createGain();
-      osc.type='square'; osc.frequency.value=880; osc.connect(g); g.connect(ctx.destination);
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type='square'; o.frequency.value=880; o.connect(g); g.connect(ctx.destination);
       g.gain.setValueAtTime(0.0001, ctx.currentTime);
       g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime+0.01);
-      osc.start();
-      setTimeout(()=>{ g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.05); osc.stop(); ctx.close(); }, 110);
-    }catch(_){}
+      o.start();
+      setTimeout(()=>{ g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.05); o.stop(); ctx.close(); }, 110);
+    }catch(e){}
   }
+  function vibrate(){ if($('vibrate').checked && navigator.vibrate) navigator.vibrate(50); }
+  function normalize(x){ return String(x||'').trim(); }
 
-  // --- normalización / validación ---
-  function sanitize(s){
-    return String(s).replace(/[\r\n\t]/g,'').replace(/[^\x20-\x7E]/g,'').trim();
+  // Sanitiza lo recibido del lector
+  function sanitize(raw){
+    let s = String(raw || '');
+    s = s.replace(/[\r\n\t]+/g, '').replace(/[^\x20-\x7E]/g, ''); // control chars
+    if(STRIP_AIM_ID) s = s.replace(/^\][A-Z]\d/, '');             // AIM ID
+    return s.trim();
   }
+  // Normaliza UPC/EAN (EAN-13 con 0 inicial → UPC-A de 12 dígitos)
   function normalizeUpcEan(s){
-    // Convierte EAN-13 con 0 inicial a UPC-A (12 dígitos) para evitar duplicados de representación
     if(/^\d{13}$/.test(s) && s.startsWith('0')) return s.slice(1);
     return s;
   }
-  function normalizeCode(s){
-    s = sanitize(s);
-    s = s.replace(/\s+/g,''); // quita espacios internos
-    s = normalizeUpcEan(s);
-    return s;
-  }
-  function isValid(code){
-    return code.length >= MIN_LEN && VALID_RE.test(code);
+  function isValidCode(s){
+    return s.length >= MIN_LEN && VALID_RE.test(s);
   }
 
-  // --- agregar único a la tabla ---
-  function addUnique(code){
-    if(unique.has(code)) return; // ya registrado (NO duplicamos)
-    const ts = new Date();
-    unique.set(code, ts);
+  // ===== CSV (A = manifiesto, B = ruta) =====
+  $('csv').addEventListener('change', (e)=>{
+    const f = e.target.files?.[0]; if(!f) return;
+    Papa.parse(f, {
+      complete: (res)=>{
+        const rows = res.data.filter(r=>r && r.length && r.some(c=>String(c).trim()!==''));
+        if(!rows.length){ setStatus('CSV vacío.', 'err'); return; }
+        const first = rows[0];
+        const hasHeader = first.some(x => isNaN(Number(String(x).trim())) && String(x).trim().length>0);
+        const data = hasHeader ? rows.slice(1) : rows;
 
-    const tr = document.createElement('tr');
-    const idx = unique.size;
-    tr.innerHTML = `<td>${idx}</td><td>${code}</td><td>${ts.toLocaleTimeString()}</td>`;
-    // insertar arriba
-    uniqueBody.insertBefore(tr, uniqueBody.firstChild);
+        map.clear();
+        uniqueScans.clear();
+        $('history').querySelector('tbody').innerHTML = '';
+        $('successCount').textContent = '0 únicos válidos';
 
-    uniqueCount.textContent = `${unique.size} únicos`;
+        const manifestList = [];
+        const routeList = [];
+        for(const r of data){
+          const manifest = normalize(r[0]); // Col A
+          const routeId  = normalize(r[1]); // Col B
+          if(manifest){
+            map.set(manifest, routeId || '');
+            manifestList.push(manifest);
+            routeList.push(routeId || '');
+          }
+        }
+
+        // KPIs
+        const uniqueManifests = new Set(manifestList).size;                  // Cantidad de paquetes
+        const uniqueRoutes    = new Set(routeList.filter(x=>x!=='')).size;   // Cantidad de rutas
+        const freq = Object.create(null);
+        for(const m of manifestList){ freq[m] = (freq[m]||0) + 1; }
+        let dupManifests = 0; for(const m in freq){ if(freq[m] > 1) dupManifests += (freq[m]-1); }
+
+        $('kpi-unique-manifests').textContent = uniqueManifests;
+        $('kpi-unique-routes').textContent    = uniqueRoutes;
+        $('kpi-dup-manifests').textContent    = dupManifests;
+        $('csv-summary').style.display = 'flex';
+
+        setStatus(`CSV cargado (${uniqueManifests} paquetes únicos, ${uniqueRoutes} rutas). Escanee con el lector.`, 'ok');
+        $('manual').focus();
+      },
+      error: ()=> setStatus('Error al leer el CSV.', 'err')
+    });
+  });
+
+  // ===== Captura global del lector (HID) =====
+  function scheduleAutoProcess(){
+    if(inactivityTimer) clearTimeout(inactivityTimer);
+    inactivityTimer = setTimeout(flushScanBuffer, INACTIVITY_MS);
   }
+  function appendToBuffer(ch){
+    scanBuffer += ch;
+    bufferView.textContent = scanBuffer;               // monitor visible
+    const manual = $('manual');
+    if(document.activeElement !== manual) manual.value = scanBuffer; // reflejo opcional
+    scheduleAutoProcess();
+  }
+  function flushScanBuffer(){
+    let code = sanitize(scanBuffer);
+    scanBuffer = '';
+    bufferView.textContent = '';
+    $('manual').value = '';
+    if(!code) return;
 
-  // --- flush de un escaneo ---
-  function flush(){
-    const raw = buffer; buffer=''; showBuffer();
-    let code = normalizeCode(raw);
-    if(!isValid(code)) return;
+    code = normalizeUpcEan(code);
+    if(!isValidCode(code)) return;
 
     const now = Date.now();
-    if(code === lastScan && (now - lastWhen) < DEDUPE_MS) return; // rebote inmediato
-    lastScan = code; lastWhen = now;
+    if(code === lastCode && (now - lastWhen) < DEDUPE_MS) return; // rebote inmediato
+    lastCode = code; lastWhen = now;
 
-    lastEl.textContent = code;
-    addUnique(code); // << SOLO únicos
-    beep();
+    handleDetected(code);
   }
 
-  // --- auto-flush (pausa) ---
-  function schedule(){
-    if(!$('autoFlush').checked) return;
-    clearTimeout(timer);
-    const ms = Math.max(40, Number($('flushMs').value || 120));
-    timer = setTimeout(flush, ms);
-  }
+  document.addEventListener('keydown', (ev)=>{
+    if(map.size === 0) return;                   // sin CSV, ignorar
+    if(ev.ctrlKey || ev.altKey || ev.metaKey) return;
 
-  // --- capturas globales (funciona sin foco) ---
-  document.addEventListener('keydown', e=>{
-    logKey(e);
-    if(e.ctrlKey || e.altKey || e.metaKey) return;
-
-    if(e.key === 'Enter' || e.key === 'Tab'){
-      e.preventDefault(); flush(); return;
+    if(ev.key === 'Enter' || ev.key === 'Tab'){
+      ev.preventDefault();
+      flushScanBuffer();
+      return;
     }
-    if(e.key === 'Backspace'){
-      buffer = buffer.slice(0,-1); showBuffer(); schedule(); return;
+    if(ev.key === 'Backspace'){
+      scanBuffer = scanBuffer.slice(0, -1);
+      bufferView.textContent = scanBuffer;
+      const manual = $('manual');
+      if(document.activeElement !== manual) manual.value = scanBuffer;
+      scheduleAutoProcess();
+      return;
     }
-    if(e.key && e.key.length === 1){
-      buffer += e.key; showBuffer();
-      if(e.key !== ' ') e.preventDefault();
-      schedule();
+    if(ev.key && ev.key.length === 1){
+      appendToBuffer(ev.key);
+      if(ev.key !== ' ') ev.preventDefault();   // evita scroll accidental
     }
   }, true);
 
-  document.addEventListener('paste', e=>{
-    const txt = (e.clipboardData || window.clipboardData).getData('text') || '';
-    if(txt){ e.preventDefault(); buffer += txt; showBuffer(); schedule(); }
+  document.addEventListener('paste', (ev)=>{
+    if(map.size === 0) return;
+    const txt = (ev.clipboardData || window.clipboardData).getData('text') || '';
+    if(txt){
+      ev.preventDefault();
+      scanBuffer += txt;
+      bufferView.textContent = scanBuffer;
+      scheduleAutoProcess();
+    }
   });
 
-  // --- controles ---
-  $('clearAll').addEventListener('click', ()=>{
-    buffer=''; showBuffer(); lastEl.textContent='—';
-    unique.clear(); uniqueBody.innerHTML=''; uniqueCount.textContent='0 únicos';
-    keysEl.textContent='';
-  });
+  // ===== Resultado (tabla: SOLO éxitos únicos) =====
+  function updateUniqueCounter(){
+    $('successCount').textContent = `${uniqueScans.size} únicos válidos`;
+  }
 
-  // init
-  showBuffer();
+  function addUniqueSuccess(code, route){
+    if(uniqueScans.has(code)) return; // ya contado → NO lo registramos otra vez
+    uniqueScans.add(code);
+
+    const tb = $('history').querySelector('tbody');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${new Date().toLocaleTimeString()}</td><td>${code}</td><td>${route}</td>`;
+    tb.insertBefore(tr, tb.firstChild);
+    while(tb.rows.length>200) tb.deleteRow(tb.rows.length-1); // por si quieres más de 20
+
+    updateUniqueCounter();
+  }
+
+  function handleDetected(codeRaw){
+    const clean = normalizeUpcEan(sanitize(codeRaw));
+    const route = map.get(clean);
+    if(route !== undefined){
+      if(uniqueScans.has(clean)){
+        setStatus(`Duplicado (no contado): ${clean}`, 'warn');
+        toast(`↻ Duplicado: ${clean}`, 'warn');
+        // No beep para duplicados; comenta la siguiente línea si quieres beep igual
+        return;
+      }
+      setStatus(`Ruta: ${route || '(sin ruta)'}`, 'ok');
+      toast(`✔ ${clean} → ${route || '(sin ruta)'}`, 'ok');
+      beep(); vibrate();
+      addUniqueSuccess(clean, route || '(sin ruta)');
+    }else{
+      setStatus('Código no encontrado en el CSV.', 'err');
+      toast(`✖ ${clean} no encontrado`, 'err');
+      beep(); // error audible, no se registra
+    }
+  }
+
+  // Limpiar historial / contador
+  $('clear-history').addEventListener('click', ()=>{
+    $('history').querySelector('tbody').innerHTML = '';
+    uniqueScans.clear();
+    updateUniqueCounter();
+    setStatus('Historial limpiado.', 'warn');
+  });
 </script>
 </body>
 </html>
+
