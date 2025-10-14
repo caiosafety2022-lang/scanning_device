@@ -305,10 +305,12 @@
     const route = map.get(clean);
     if(route !== undefined){
       if(uniqueScans.has(clean)){
-        setStatus(`Duplicado (no contado): ${clean}`, 'warn');
-        toast(`↻ Duplicado: ${clean}`, 'warn');
-        // No beep para duplicados; comenta la siguiente línea si quieres beep igual
-        return;
+        const routeLabel = route || '(sin ruta)';
+        setStatus(`Duplicado (no contado): ${routeLabel}`, 'warn');
+        toast(`↻ Duplicado: ${routeLabel}`, 'warn');
+        return; // no beep, no registro
+      }
+
       }
       setStatus(`Ruta: ${route || '(sin ruta)'}`, 'ok');
       toast(`✔ ${clean} → ${route || '(sin ruta)'}`, 'ok');
